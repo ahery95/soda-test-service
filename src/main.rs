@@ -12,7 +12,7 @@ use std::net::ToSocketAddrs;
 use url::Url;
 
 use hyper::header::{CONTENT_LENGTH, CONTENT_TYPE};
-use hyper::{Body, Client, Method, client::HttpConnector, Request, Response, Server,rt};
+use hyper::{Body, Method, Request, Response, Server,rt};
 use hyper_router::{Route, RouterBuilder, RouterService};
 
 
@@ -57,7 +57,7 @@ fn main() {
 
   fn construct_response(req: Request<Body>) -> Response<Body> {
 
-      let body ="localhost:8081";
+      let body ="localhost:8081"; // for listen we  can't capture dynamic environment in a fn item
     Response::builder()
         .header(CONTENT_LENGTH, body.len() as u64)
         .header(CONTENT_TYPE, "text/plain")
@@ -79,10 +79,6 @@ fn main() {
         let server = Server::bind(&addr)
           .serve(router_service)
           .map_err(|e| eprintln!("server error: {}", e));
-
-    hyper::rt::run(server)
-
-
 
   }
 

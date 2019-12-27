@@ -1,8 +1,4 @@
 use crate::domain::AppState;
-use actix_web::middleware::{Middleware, Started};
-use actix_web::{FromRequest, HttpRequest, Result};
-use actix_web_httpauth::extractors::basic::{BasicAuth, Config};
-use actix_web_httpauth::extractors::AuthenticationError;
 
 pub struct Auth;
 
