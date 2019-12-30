@@ -75,10 +75,13 @@ fn main() {
       Ok(RouterService::new(router))
   }
 
-    let addr = "127.0.0.1:8080".parse().unwrap();
+    let addr = ([127, 0, 0, 1], 8080).into();
         let server = Server::bind(&addr)
           .serve(router_service)
           .map_err(|e| eprintln!("server error: {}", e));
+
+     let server = Server::bind(addr);
+     println!("Listening on http://{}",addr);
 
   }
 

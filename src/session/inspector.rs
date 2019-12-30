@@ -1,13 +1,13 @@
 use crate::domain::selenium::{Capabilities, Command, SessionStatus};
 use crate::domain::AppState;
-use actix_web::HttpRequest;
 use bytes::Bytes;
+use hyper::{Method, Request, Response,Error,service::Service};
 
 /// Inspect the given chunk from a request's payload.
 ///
 /// This function retrieve the method and the path from the request
 /// to know which event to match.
-pub fn inspect(req: &HttpRequest<AppState>, chunk: Bytes) -> Bytes {
+pub fn inspect(req: Request<AppState>, chunk: Bytes) -> Bytes {
     let method = req.method().to_string();
     let path = req.uri().to_string();
     let auth_user = req.state().auth_user.clone();

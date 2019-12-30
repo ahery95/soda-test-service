@@ -1,9 +1,12 @@
 use crate::domain::AppState;
+use hyper::{Method, Request, Response,Error,service::Service};
+use futures::{future, Future,};
 
 pub struct Auth;
 
-impl Middleware<AppState> for Auth {
-    fn start(&self, req: &HttpRequest<AppState>) -> Result<Started> {
+impl Service <AppState> for Auth {
+
+    fn call(&self, req: &Request<AppState>) -> Self::Future {
         // The credentials are configured in the main.
         let auth_user = &req.state().auth_user;
         let auth_pwd = &req.state().auth_pwd;
