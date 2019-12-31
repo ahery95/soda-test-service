@@ -1,127 +1,78 @@
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate clap;
-extern crate hyper_router;
 
-use env_logger;
-use std::env;
-use std::net::ToSocketAddrs;
-use url::Url;
+#![allow(unused_variables)]
 
-use hyper::header::{CONTENT_LENGTH, CONTENT_TYPE};
-use hyper::{Body, Method, Request, Response, Server,rt};
-use hyper_router::{Route, RouterBuilder, RouterService};
+use {
+    hyper::{
+        // Miscellaneous types from Hyper for working with HTTP.
+        Body, Client, Request, Response, Server, Uri,
+
+        // This function turns a closure which returns a future into an
+        // implementation of the the Hyper `Service` trait, which is an
+        // asynchronous function from a generic `Request` to a `Response`.
+        service::service_fn,
+
+        // A function which runs a future to completion using the Hyper runtime.
+        rt::run,
+    },
+    futures::{
+        // Extension trait for futures 0.1 futures, adding the `.compat()` method
+        // which allows us to use `.await` on 0.1 futures.
+        compat::Future01CompatExt,
+        // Extension traits providing additional methods on futures.
+        // `FutureExt` adds methods that work for all futures, whereas
+        // `TryFutureExt` adds methods to futures that return `Result` types.
+        future::{FutureExt, TryFutureExt},
+    },
+    std::net::SocketAddr,
+};
 
 
 
-mod cli;
-mod domain;
-mod middlewares;
-mod proxy;
-mod session;
+
+
+
+
+  async fn serve_req(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    // Always return successfully with a response containing a body with
+    // a friendly greeting ;)
+    Ok(Response::new(Body::from("hello, world!")))
+}
+
+async fn run_server(addr: SocketAddr) {
+    println!("Listening on http://{}", addr);
+
+    // Create a server bound on the provided address
+    let serve_future = Server::bind(&addr)
+        // Serve requests using our `async serve_req` function.
+        // `serve` takes a closure which returns a type implementing the
+        // `Service` trait. `service_fn` returns a value implementing the
+        // `Service` trait, and accepts a closure which goes from request
+        // to a future of the response. To use our `serve_req` function with
+        // Hyper, we have to box it and put it in a compatability
+        // wrapper to go from a futures 0.3 future (the kind returned by
+        // `async fn`) to a futures 0.1 future (the kind used by Hyper).
+        .serve(|| service_fn(|req| serve_req(req).boxed().compat()));
+
+    // Wait for the server to complete serving or exit with an error.
+    // If an error occurred, print it to stderr.
+    if let Err(e) = serve_future.compat().await {
+        eprintln!("server error: {}", e);
+    }
+}
 
 fn main() {
-  std::env::set_var("RUST_LOG", "info");
-  env_logger::init();
+    // Set the address to run our socket on.
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
 
-  // The environment variables used for the Basic-Auth.
-  // In the future it will be replaced by a database for the hot reload.
-  let auth_user = env::var("AUTH_USER").unwrap_or_else(|_| "".to_string());
-  let auth_pwd = env::var("AUTH_PWD").unwrap_or_else(|_| "".to_string());
+    // Call our `run_server` function, which returns a future.
+    // As with every `async fn`, for `run_server` to do anything,
+    // the returned future needs to be run. Additionally,
+    // we need to convert the returned future from a futures 0.3 future into a
+    // futures 0.1 future.
+    let futures_03_future = run_server(addr);
+    let futures_01_future = futures_03_future.unit_error().boxed().compat();
 
-  // Start the parsing of arguments.
-  let matches = cli::init();
-
-  // Configure addresses to listen and forward.
-  let listen = matches.value_of("listen").unwrap();
-  let forwarded = matches.value_of("forward").unwrap();
-
-  // Configure the timeout for the proxy, default to 60s
-  let timeout = value_t!(matches, "timeout", u32).unwrap_or(60);
-
-  // Verify and build the forward URL.
-  let forward_url = Url::parse(&format!(
-    "http://{}",
-    forwarded.to_socket_addrs().unwrap().next().unwrap()
-  ))
-  .unwrap();
-
-  info!(
-    "Server will listen on {} and forward to {}",
-    listen, forward_url
-  );
-
-
-  fn construct_response(req: Request<Body>) -> Response<Body> {
-
-      let body ="localhost:8081"; // for listen we  can't capture dynamic environment in a fn item
-    Response::builder()
-        .header(CONTENT_LENGTH, body.len() as u64)
-        .header(CONTENT_TYPE, "text/plain")
-        .body(Body::from(body))
-        .expect("Failed to construct the response")
-    }
-
-
-    fn router_service() -> Result<RouterService, std::io::Error> {
-      let router = RouterBuilder::new()
-          .add(Route::get("/hello").using(construct_response))
-          .add(Route::from(Method::PATCH, "/asd").using(construct_response))
-          .build();
-
-      Ok(RouterService::new(router))
-  }
-
-    let addr = ([127, 0, 0, 1], 8080).into();
-        let server = Server::bind(&addr)
-          .serve(router_service)
-          .map_err(|e| eprintln!("server error: {}", e));
-
-     let server = Server::bind(addr);
-     println!("Listening on http://{}",addr);
-
-  }
-
-
-
-  // let make_service = make_service_fn(|_conn| async {
-  //   Ok::<_, Infallible>(service_fn(construct_response))
-  // });
-  // Run the server with a state containing the forward url and the default credentials.
-  // The server spawns a number of workers equals to the number of logical CPU cores,
-  // each in its own thread.
-
-//   let service = service_fn(|req: Request<Body>| async move {
-
-//     Ok(Response::new(Body::from("Hello World")))
-// });
-
-//     let server = Server::bind(&listen)
-//           .serve(&service);
-
-
-//   server::new(move || {
-//     let state = domain::AppState::init(
-//       forward_url.clone(),
-//       auth_user.clone(),
-//       auth_pwd.clone(),
-//       timeout,
-//     );
-//     App::with_state(state)
-//       .middleware(Logger::default())
-//       .resource("/healthcheck", |r| {
-//         r.method(Method::GET).f(|_| HttpResponse::Ok())
-//       })
-//       .default_resource(|r| {
-//         r.middleware(middlewares::Auth);
-//         // r.f(proxy::forward)
-//       })
-//   })
-//   .bind(listen)
-//   .expect("Cannot bind listening port")
-//   .system_exit()
-//   .run();
-// }
+    // Finally, we can run the future to completion using the `run` function
+    // provided by Hyper.
+    run(futures_01_future);
+}
